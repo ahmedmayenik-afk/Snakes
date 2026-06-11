@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>HAMMER CHASE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; touch-action:none; user-select:none; }
+  body {
+    background:#0d0020;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    height:100vh;
+    overflow:hidden;
+    font-family:'Fredoka One',cursive;
+  }
+  #gameArea {
+    position:relative;
+    width:100vw;
+    height:55vw;
+    max-width:500px;
+    max-height:275px;
+    background:radial-gradient(ellipse at center,#1e0440 0%,#0d0020 100%);
+    flex-shrink:0;
+  }
+  canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+  #hud {
+    width:100%; max-width:500px;
+    display:flex; justify-content:space-around; align-items:center;
+    padding:6px 10px;
+    background:#0a0018;
+    border-bottom:2px solid #ff6bff22;
+    flex-shrink:0;
+  }
+  .hud-item { text-align:center; }
+  .hud-label { font-size:9px; color:#ffffff44; letter-spacing:2px; }
+  .hud-value { font-size:20px; color:#ff6bff; text-shadow:0 0 10px #ff6bff; }
+  #timerBar { width:100%; max-width:500px; height:5px; background:#ffffff11; flex-shrink:0; }
+  #timerFill { height:100%; background:linear-gradient(90deg,#ff6bff,#ff2dff); box-shadow:0 0 8px #ff6bff; transition:width 0.1s linear; }
+  #controls {
+    width:100%; max-width:500px;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:5px; padding:8px;
+    flex:1;
+    background:#0a0018;
+  }
+  .ctrl-btn {
+    background:#ffffff08;
+    border:2px solid #ff6bff22;
+    border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    transition:background 0.08s;
+  }
+  .ctrl-btn.pressed, .ctrl-btn:active {
+    background:#ff6bff22;
+    border-color:#ff6bff66;
+  }
+  .smash-btn {
+    grid-column:2; grid-row:2;
+    font-size:30px;
+    background:#ff2dff22 !important;
+    border-color:#ff6bff55 !important;
+  }
+  .smash-btn.pressed {
+    background:#ff2dff44 !important;
+    border-color:#ff6bff !important;
+    box-shadow:0 0 20px #ff6bff !important;
+  }
+  #overlay {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    background:rgba(13,0,32,0.93);
+    gap:10px; z-index:10;
+  }
+  #overlay h1 { font-size:clamp(22px,7vw,36px); color:#ff6bff; text-shadow:0 0 20px #ff6bff; }
+  #overlay p { font-size:clamp(10px,3vw,14px); color:#ffffff66; text-align:center; line-height:1.6; }
+  #overlay .final { font-size:clamp(16px,5vw,26px); color:#ffdd00; text-shadow:0 0 15px #ffdd00; }
+  .start-btn {
+    font-family:'Fredoka One',cursive;
+    font-size:16px; padding:12px 32px;
+    background:#ff6bff; border:none; border-radius:50px;
+    color:#0d0020; cursor:pointer;
+    box-shadow:0 0 25px #ff6bff88;
+  }
+</style>
+</head>
+<body>
+
+<div id="gameArea">
+  <canvas id="gameCanvas"></canvas>
+  <div id="overlay" id="overlay">
+    <div style="font-size:50px">🤓🔨 vs 🙂</div>
+    <h1>HAMMER CHASE</h1>
+    <p>Chase 🙂 and SMASH him!<br>He gets faster every hit 😈</p>
+    <button class="start-btn" onclick="startGame()">PLAY NOW</button>
+  </div>
+</div>
+
+<div id="timerBar"><div id="timerFill" style="width:100%"></div></div>
+
+<div id="hud">
+  <div class="hud-item"><div class="hud-label">SMASHES</div><div class="hud-value" id="smashCount">0</div></div>
+  <div class="hud-item"><div class="hud-label">🤓 VS 🙂</div><div class="hud-value" id="timeLeft">30</div></div>
+  <div class="hud-item"><div class="hud-label">BEST</div><div class="hud-value" id="bestCount">0</div></div>
+</div>
+
+<div id="controls">
+  <div></div>
+  <div class="ctrl-btn" id="btnUp">⬆️</div>
+  <div></div>
+  <div class="ctrl-btn" id="btnLeft">⬅️</div>
+  <div class="ctrl-btn smash-btn" id="btnSmash">🔨</div>
+  <div class="ctrl-btn" id="btnRight">➡️</div>
+  <div></div>
+  <div class="ctrl-btn" id="btnDown">⬇️</div>
+  <div></div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+
+let W, H;
+let player, runner;
+let smashes = 0, best = 0, timeLeft = 30;
+let gameRunning = false;
+let animFrame, timerInterval;
+let pressedKeys = new Set();
+let particles = [];
+let smashEffects = [];
+let runnerSpeedBase = 0;
+let audioCtx = null;
+
+function resize() {
+  const area = document.getElementById('gameArea');
+  W = canvas.width = area.offsetWidth;
+  H = canvas.height = area.offsetHeight;
+}
+
+// FAHHH sound — punchy impact using Web Audio API
+function playFahhhSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Layer 1: low thud
+    const buf1 = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
+    const d1 = buf1.getChannelData(0);
+    for (let i = 0; i < d1.length; i++) {
+      const t = i / audioCtx.sampleRate;
+      const freq = 180 * Math.exp(-t * 12);
+      d1[i] = Math.sin(2 * Math.PI * freq * t) * Math.exp(-t * 8) * 0.9;
+    }
+    const src1 = audioCtx.createBufferSource();
+    src1.buffer = buf1;
+    const gain1 = audioCtx.createGain();
+    gain1.gain.setValueAtTime(1, audioCtx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    src1.connect(gain1); gain1.connect(audioCtx.destination);
+    src1.start();
+
+    // Layer 2: the "FAHHH" — a pitched noise burst going from high to low
+    const buf2 = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.35, audioCtx.sampleRate);
+    const d2 = buf2.getChannelData(0);
+    for (let i = 0; i < d2.length; i++) {
+      const t = i / audioCtx.sampleRate;
+      const freq = 600 * Math.exp(-t * 10) + 80;
+      d2[i] = (Math.sin(2 * Math.PI * freq * t) + Math.sin(2 * Math.PI * freq * 1.5 * t) * 0.5) * Math.exp(-t * 6) * 0.7;
+    }
+    const src2 = audioCtx.createBufferSource();
+    src2.buffer = buf2;
+    const gain2 = audioCtx.createGain();
+    gain2.gain.setValueAtTime(0.8, audioCtx.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+    src2.connect(gain2); gain2.connect(audioCtx.destination);
+    src2.start(audioCtx.currentTime + 0.02);
+
+    // Layer 3: crack/smack
+    const buf3 = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+    const d3 = buf3.getChannelData(0);
+    for (let i = 0; i < d3.length; i++) {
+      const t = i / audioCtx.sampleRate;
+      d3[i] = (Math.random() * 2 - 1) * Math.exp(-t * 40) * 0.8;
+    }
+    const src3 = audioCtx.createBufferSource();
+    src3.buffer = buf3;
+    const gain3 = audioCtx.createGain();
+    gain3.gain.setValueAtTime(1, audioCtx.currentTime);
+    src3.connect(gain3); gain3.connect(audioCtx.destination);
+    src3.start();
+
+  } catch(e) { console.log('Audio error:', e); }
+}
+
+function initGame() {
+  resize();
+  player = {
+    x: W * 0.5, y: H * 0.5,
+    size: Math.min(W, H) * 0.1,
+    speed: Math.min(W, H) * 0.018,
+    frame: 0, swinging: 0
+  };
+  runner = {
+    x: W * 0.2, y: H * 0.2,
+    size: Math.min(W, H) * 0.09,
+    speed: Math.min(W, H) * 0.022,
+    vx: (Math.random()-0.5) * 4,
+    vy: (Math.random()-0.5) * 4,
+    stun: 0, frame: 0, scared: 0
+  };
+  runnerSpeedBase = runner.speed;
+  smashes = 0; timeLeft = 30;
+  particles = []; smashEffects = [];
+  document.getElementById('smashCount').textContent = '0';
+  document.getElementById('timeLeft').textContent = '30';
+  document.getElementById('timerFill').style.width = '100%';
+}
+
+function startGame() {
+  overlay.style.display = 'none';
+  initGame();
+  gameRunning = true;
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (!gameRunning) return;
+    timeLeft--;
+    document.getElementById('timeLeft').textContent = timeLeft;
+    document.getElementById('timerFill').style.width = (timeLeft/30*100)+'%';
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+  loop();
+}
+
+function endGame() {
+  gameRunning = false;
+  clearInterval(timerInterval);
+  cancelAnimationFrame(animFrame);
+  if (smashes > best) best = smashes;
+  document.getElementById('bestCount').textContent = best;
+  const stars = smashes >= 12 ? '⭐⭐⭐' : smashes >= 6 ? '⭐⭐' : '⭐';
+  overlay.innerHTML = `
+    <div style="font-size:50px">🤓🔨💥🙂</div>
+    <h1>TIME'S UP!</h1>
+    <p class="final" style="font-size:clamp(18px,5vw,28px);color:#ffdd00;text-shadow:0 0 15px #ffdd00">${smashes} SMASHES ${stars}</p>
+    <p style="color:#ffffff66;font-size:clamp(10px,3vw,14px)">${smashes>=12?'ABSOLUTE MENACE 😈':smashes>=6?'PRETTY GOOD 💪':'HE TOO FAST 😅'}</p>
+    <button class="start-btn" onclick="startGame()">RETRY</button>
+  `;
+  overlay.style.display = 'flex';
+}
+
+function movePlayer() {
+  const spd = player.speed;
+  if (pressedKeys.has('up'))    player.y -= spd;
+  if (pressedKeys.has('down'))  player.y += spd;
+  if (pressedKeys.has('left'))  player.x -= spd;
+  if (pressedKeys.has('right')) player.x += spd;
+  player.x = Math.max(player.size, Math.min(W-player.size, player.x));
+  player.y = Math.max(player.size, Math.min(H-player.size, player.y));
+  player.frame += 0.15;
+  if (player.swinging > 0) player.swinging--;
+}
+
+function moveRunner() {
+  if (runner.stun > 0) { runner.stun--; return; }
+
+  const dx = player.x - runner.x;
+  const dy = player.y - runner.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  runner.scared = dist < H * 0.6 ? Math.min(1, runner.scared + 0.08) : Math.max(0, runner.scared - 0.02);
+
+  const spd = runner.speed * (1 + runner.scared * 1.2);
+
+  // Flee direction — away from player + random chaos
+  const fleeX = -dx / dist;
+  const fleeY = -dy / dist;
+  const chaos = 0.6 + runner.scared * 0.8;
+
+  runner.vx += fleeX * 1.5 + (Math.random()-0.5) * chaos;
+  runner.vy += fleeY * 1.5 + (Math.random()-0.5) * chaos;
+
+  // Limit speed
+  const vel = Math.sqrt(runner.vx*runner.vx + runner.vy*runner.vy);
+  if (vel > spd) { runner.vx = runner.vx/vel*spd; runner.vy = runner.vy/vel*spd; }
+
+  runner.x += runner.vx;
+  runner.y += runner.vy;
+
+  // Bounce off walls with energy
+  if (runner.x < runner.size) { runner.x = runner.size; runner.vx = Math.abs(runner.vx) * 0.9; }
+  if (runner.x > W-runner.size) { runner.x = W-runner.size; runner.vx = -Math.abs(runner.vx) * 0.9; }
+  if (runner.y < runner.size) { runner.y = runner.size; runner.vy = Math.abs(runner.vy) * 0.9; }
+  if (runner.y > H-runner.size) { runner.y = H-runner.size; runner.vy = -Math.abs(runner.vy) * 0.9; }
+
+  runner.frame += 0.25 + runner.scared * 0.3;
+}
+
+function trySmash() {
+  if (!gameRunning) return;
+  player.swinging = 15;
+
+  const dx = player.x - runner.x;
+  const dy = player.y - runner.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const reach = (player.size + runner.size) * 1.5;
+
+  if (dist < reach && runner.stun <= 0) {
+    smashes++;
+    document.getElementById('smashCount').textContent = smashes;
+    runner.stun = 35;
+    playFahhhSound();
+
+    // Speed up runner permanently
+    runner.speed = Math.min(runnerSpeedBase * 2.5, runner.speed + runnerSpeedBase * 0.15);
+
+    // Fling runner
+    const ang = Math.atan2(runner.y-player.y, runner.x-player.x);
+    runner.vx = Math.cos(ang) * runner.speed * 3;
+    runner.vy = Math.sin(ang) * runner.speed * 3;
+
+    // Particles
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = Math.random() * 5 + 2;
+      particles.push({
+        x: runner.x, y: runner.y,
+        vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+        life: 1,
+        color: ['#ff6bff','#ffdd00','#ff4444','#fff','#00ffcc'][Math.floor(Math.random()*5)],
+        size: Math.random()*5+2
+      });
+    }
+
+    smashEffects.push({ x: runner.x, y: runner.y - runner.size, life: 1 });
+  }
+}
+
+function drawParticles() {
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.04;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawSmashEffects() {
+  for (let i = smashEffects.length-1; i >= 0; i--) {
+    const e = smashEffects[i];
+    ctx.save();
+    ctx.globalAlpha = e.life;
+    ctx.font = `bold ${Math.min(W,H)*0.12*(0.5+e.life*0.5)}px Fredoka One`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffdd00';
+    ctx.strokeStyle = '#ff6bff';
+    ctx.lineWidth = 3;
+    ctx.strokeText('💥 FAHHH!', e.x, e.y);
+    ctx.fillText('💥 FAHHH!', e.x, e.y);
+    ctx.restore();
+    e.y -= 1.5;
+    e.life -= 0.03;
+    if (e.life <= 0) smashEffects.splice(i, 1);
+  }
+}
+
+function drawPlayer() {
+  const s = player.size;
+  const swing = player.swinging > 0 ? (player.swinging/15) * Math.PI * 0.7 : 0;
+  ctx.save();
+  ctx.translate(player.x, player.y);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(0, s*0.85, s*0.55, s*0.18, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Hammer arm (raised when swinging)
+  ctx.save();
+  ctx.translate(s*0.35, -s*0.1);
+  ctx.rotate(-Math.PI/4 - swing);
+  ctx.fillStyle = '#92400e';
+  ctx.fillRect(-s*0.07, -s*0.9, s*0.14, s*0.9);
+  ctx.fillStyle = '#6b7280';
+  ctx.fillRect(-s*0.26, -s*1.1, s*0.52, s*0.3);
+  ctx.fillStyle = '#9ca3af';
+  ctx.fillRect(-s*0.24, -s*1.08, s*0.48, s*0.1);
+  ctx.restore();
+
+  // Body emoji 🤓
+  ctx.font = `${s*1.8}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🤓', 0, 0);
+
+  ctx.restore();
+}
+
+function drawRunner() {
+  const s = runner.size;
+  const stun = runner.stun > 0;
+  const scared = runner.scared > 0.5;
+  const bob = Math.sin(runner.frame * 2) * 2;
+
+  ctx.save();
+  ctx.translate(runner.x, runner.y + bob);
+  if (stun) ctx.globalAlpha = 0.6 + Math.sin(Date.now()*0.03)*0.4;
+
+  // Shadow
+  ctx.globalAlpha = (stun ? 0.6 : 1) * 0.3;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(0, s*0.85, s*0.55, s*0.18, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = stun ? (0.6 + Math.sin(Date.now()*0.03)*0.4) : 1;
+
+  // Runner emoji — changes when scared
+  ctx.font = `${s*1.8}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (stun) {
+    ctx.fillText('😵', 0, 0);
+  } else if (scared) {
+    ctx.fillText('😱', 0, 0);
+  } else {
+    ctx.fillText('🙂', 0, 0);
+  }
+
+  // Stun stars
+  if (stun) {
+    for (let i = 0; i < 3; i++) {
+      const a = (Date.now()/200) + i*(Math.PI*2/3);
+      ctx.font = `${s*0.5}px serif`;
+      ctx.fillText('⭐', Math.cos(a)*s*0.9, Math.sin(a)*s*0.4 - s*1.1);
+    }
+  }
+
+  // Speed lines when scared
+  if (scared && !stun) {
+    ctx.strokeStyle = '#ff6bff44';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const lx = -s*0.8 - i*s*0.2;
+      const ly = (-s*0.5 + i*s*0.3);
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(lx - s*0.4, ly);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function loop() {
+  if (!gameRunning) return;
+  ctx.clearRect(0, 0, W, H);
+
+  // BG grid
+  ctx.strokeStyle = '#ffffff04';
+  ctx.lineWidth = 1;
+  const gs = 30;
+  for (let x = 0; x < W; x+=gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y+=gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  movePlayer();
+  moveRunner();
+  drawParticles();
+  drawRunner();
+  drawPlayer();
+  drawSmashEffects();
+
+  animFrame = requestAnimationFrame(loop);
+}
+
+// Button controls
+['btnUp','btnDown','btnLeft','btnRight'].forEach(id => {
+  const btn = document.getElementById(id);
+  const dir = id.replace('btn','').toLowerCase();
+  btn.addEventListener('touchstart', e => { e.preventDefault(); pressedKeys.add(dir); btn.classList.add('pressed'); }, {passive:false});
+  btn.addEventListener('touchend', e => { e.preventDefault(); pressedKeys.delete(dir); btn.classList.remove('pressed'); }, {passive:false});
+  btn.addEventListener('mousedown', () => { pressedKeys.add(dir); btn.classList.add('pressed'); });
+  btn.addEventListener('mouseup', () => { pressedKeys.delete(dir); btn.classList.remove('pressed'); });
+});
+
+const smashBtn = document.getElementById('btnSmash');
+smashBtn.addEventListener('touchstart', e => { e.preventDefault(); trySmash(); smashBtn.classList.add('pressed'); }, {passive:false});
+smashBtn.addEventListener('touchend', e => { e.preventDefault(); smashBtn.classList.remove('pressed'); }, {passive:false});
+smashBtn.addEventListener('mousedown', () => { trySmash(); smashBtn.classList.add('pressed'); });
+smashBtn.addEventListener('mouseup', () => smashBtn.classList.remove('pressed'));
+
+document.addEventListener('keydown', e => {
+  const map = {ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+  if (map[e.key]) { pressedKeys.add(map[e.key]); e.preventDefault(); }
+  if (e.key === ' ') { trySmash(); e.preventDefault(); }
+});
+document.addEventListener('keyup', e => {
+  const map = {ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+  if (map[e.key]) pressedKeys.delete(map[e.key]);
+});
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
