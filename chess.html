@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CHESS ARCADE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; touch-action:manipulation; }
+  body {
+    background:#0a0015;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    font-family:'Fredoka One',cursive;
+    color:#fff;
+    overflow-x:hidden;
+  }
+  #header {
+    width:100%;
+    max-width:480px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 16px;
+    background:#0d001a;
+    border-bottom:2px solid #7c3aed33;
+  }
+  .player-info {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+  }
+  .player-label { font-size:10px; color:#ffffff55; letter-spacing:2px; font-family:'Nunito',sans-serif; }
+  .player-name { font-size:16px; }
+  .player-name.white { color:#f0d9b5; text-shadow:0 0 10px #f0d9b5aa; }
+  .player-name.black { color:#b58863; text-shadow:0 0 10px #b58863aa; }
+  #status {
+    font-size:11px;
+    color:#a78bfa;
+    text-align:center;
+    padding:4px 8px;
+    background:#1a0533;
+    border-radius:20px;
+    min-width:80px;
+  }
+  #boardWrap {
+    width:100vw;
+    max-width:480px;
+    padding:8px;
+    flex-shrink:0;
+  }
+  #board {
+    width:100%;
+    aspect-ratio:1;
+    display:grid;
+    grid-template-columns:repeat(8,1fr);
+    grid-template-rows:repeat(8,1fr);
+    border:3px solid #7c3aed55;
+    border-radius:6px;
+    overflow:hidden;
+    box-shadow:0 0 30px #7c3aed33;
+  }
+  .cell {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:min(9vw,42px);
+    cursor:pointer;
+    position:relative;
+    transition:background 0.1s;
+  }
+  .cell.light { background:#f0d9b5; }
+  .cell.dark  { background:#b58863; }
+  .cell.selected { background:#7c3aed !important; box-shadow:inset 0 0 0 3px #a78bfa; }
+  .cell.possible { background:#22c55e99 !important; }
+  .cell.possible::after {
+    content:'';
+    position:absolute;
+    width:30%;
+    height:30%;
+    background:#22c55ecc;
+    border-radius:50%;
+  }
+  .cell.possible.capture { background:#ef444499 !important; }
+  .cell.possible.capture::after { display:none; }
+  .cell.check { background:#ef4444cc !important; }
+  .cell.last-move { filter:brightness(1.25); }
+  #coords-row {
+    display:flex;
+    width:100%;
+    max-width:480px;
+    padding:0 8px;
+  }
+  .coord-spacer { width:8px; }
+  .coord { flex:1; text-align:center; font-size:10px; color:#ffffff33; font-family:'Nunito',sans-serif; }
+  #bottomBar {
+    width:100%;
+    max-width:480px;
+    display:flex;
+    gap:8px;
+    padding:8px;
+    background:#0d001a;
+  }
+  .bar-btn {
+    flex:1;
+    padding:12px 8px;
+    background:#1a0533;
+    border:2px solid #7c3aed44;
+    border-radius:10px;
+    color:#a78bfa;
+    font-family:'Fredoka One',cursive;
+    font-size:13px;
+    cursor:pointer;
+    transition:all 0.1s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .bar-btn:active { background:#7c3aed44; border-color:#a78bfa; }
+  #diffBar {
+    width:100%;
+    max-width:480px;
+    display:flex;
+    gap:6px;
+    padding:0 8px 8px;
+    background:#0d001a;
+  }
+  .diff-btn {
+    flex:1;
+    padding:8px 4px;
+    background:#0a0015;
+    border:2px solid #ffffff11;
+    border-radius:8px;
+    color:#ffffff55;
+    font-family:'Fredoka One',cursive;
+    font-size:11px;
+    cursor:pointer;
+    transition:all 0.1s;
+  }
+  .diff-btn.active { background:#7c3aed33; border-color:#7c3aed; color:#a78bfa; }
+  #overlay {
+    position:fixed;
+    inset:0;
+    background:rgba(10,0,21,0.95);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    z-index:100;
+  }
+  #overlay h1 { font-size:clamp(28px,8vw,48px); color:#a78bfa; text-shadow:0 0 30px #7c3aed; }
+  #overlay p { font-size:clamp(12px,3.5vw,16px); color:#ffffff66; text-align:center; line-height:1.6; padding:0 24px; }
+  .start-btn {
+    font-family:'Fredoka One',cursive;
+    font-size:18px;
+    padding:14px 40px;
+    background:#7c3aed;
+    border:none;
+    border-radius:50px;
+    color:#fff;
+    cursor:pointer;
+    box-shadow:0 0 30px #7c3aed88;
+    transition:transform 0.1s;
+  }
+  .start-btn:active { transform:scale(0.95); }
+  #thinkingIndicator {
+    display:none;
+    position:fixed;
+    bottom:80px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#1a0533;
+    border:2px solid #7c3aed;
+    border-radius:20px;
+    padding:8px 20px;
+    font-size:13px;
+    color:#a78bfa;
+    z-index:50;
+    animation:pulse 1s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  #capturedBar {
+    width:100%;
+    max-width:480px;
+    display:flex;
+    justify-content:space-between;
+    padding:4px 12px;
+    background:#0d001a;
+    font-size:14px;
+    min-height:28px;
+  }
+  #capturedBar span { letter-spacing:-2px; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div style="font-size:60px">♟️</div>
+  <h1>CHESS</h1>
+  <p>Play against AI<br>You are WHITE ⬜<br>Choose your difficulty</p>
+  <div style="display:flex;gap:10px;margin:4px 0">
+    <button class="diff-btn active" onclick="setDiff(1,this)">🟢 Easy</button>
+    <button class="diff-btn" onclick="setDiff(2,this)">🟡 Medium</button>
+    <button class="diff-btn" onclick="setDiff(3,this)">🔴 Hard</button>
+  </div>
+  <button class="start-btn" onclick="startGame()">PLAY NOW</button>
+</div>
+
+<div id="thinkingIndicator">🤖 AI thinking...</div>
+
+<div id="header">
+  <div class="player-info">
+    <div class="player-label">YOU</div>
+    <div class="player-name white">⬜ White</div>
+  </div>
+  <div id="status">Your turn</div>
+  <div class="player-info">
+    <div class="player-label">AI</div>
+    <div class="player-name black">⬛ Black</div>
+  </div>
+</div>
+
+<div id="capturedBar">
+  <span id="capturedByWhite"></span>
+  <span id="capturedByBlack"></span>
+</div>
+
+<div id="boardWrap">
+  <div id="board"></div>
+</div>
+
+<div id="coords-row">
+  <div class="coord-spacer"></div>
+  <div class="coord">a</div><div class="coord">b</div><div class="coord">c</div>
+  <div class="coord">d</div><div class="coord">e</div><div class="coord">f</div>
+  <div class="coord">g</div><div class="coord">h</div>
+</div>
+
+<div id="bottomBar">
+  <button class="bar-btn" onclick="undoMove()">↩️ Undo</button>
+  <button class="bar-btn" onclick="newGame()">🔄 New Game</button>
+  <button class="bar-btn" onclick="hintMove()">💡 Hint</button>
+</div>
+
+<div id="diffBar">
+  <button class="diff-btn active" id="d1" onclick="setDiff(1,this)">🟢 Easy</button>
+  <button class="diff-btn" id="d2" onclick="setDiff(2,this)">🟡 Medium</button>
+  <button class="diff-btn" id="d3" onclick="setDiff(3,this)">🔴 Hard</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// PIECE DEFINITIONS
+// ═══════════════════════════════════════════════
+const PIECES = {
+  'wK':'♔','wQ':'♕','wR':'♖','wB':'♗','wN':'♘','wP':'♙',
+  'bK':'♚','bQ':'♛','bR':'♜','bB':'♝','bN':'♞','bP':'♟'
+};
+
+const PIECE_VALUES = { P:100, N:320, B:330, R:500, Q:900, K:20000 };
+
+// Position bonus tables (simplified)
+const PAWN_TABLE = [
+  0,0,0,0,0,0,0,0,
+  50,50,50,50,50,50,50,50,
+  10,10,20,30,30,20,10,10,
+  5,5,10,25,25,10,5,5,
+  0,0,0,20,20,0,0,0,
+  5,-5,-10,0,0,-10,-5,5,
+  5,10,10,-20,-20,10,10,5,
+  0,0,0,0,0,0,0,0
+];
+const KNIGHT_TABLE = [
+  -50,-40,-30,-30,-30,-30,-40,-50,
+  -40,-20,0,0,0,0,-20,-40,
+  -30,0,10,15,15,10,0,-30,
+  -30,5,15,20,20,15,5,-30,
+  -30,0,15,20,20,15,0,-30,
+  -30,5,10,15,15,10,5,-30,
+  -40,-20,0,5,5,0,-20,-40,
+  -50,-40,-30,-30,-30,-30,-40,-50
+];
+
+let board, selected, possibleMoves, turn, gameOver, difficulty;
+let moveHistory = [], capturedWhite = [], capturedBlack = [];
+let lastMove = null;
+let inCheck = false;
+
+function setDiff(d, btn) {
+  difficulty = d;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  // update both sets
+  document.querySelectorAll(`[onclick="setDiff(${d},this)"]`).forEach(b => b.classList.add('active'));
+  document.getElementById('d1').classList.toggle('active', d===1);
+  document.getElementById('d2').classList.toggle('active', d===2);
+  document.getElementById('d3').classList.toggle('active', d===3);
+}
+
+difficulty = 1;
+
+function initBoard() {
+  board = Array(8).fill(null).map(() => Array(8).fill(null));
+  // Black pieces
+  const backRow = ['R','N','B','Q','K','B','N','R'];
+  backRow.forEach((p,i) => { board[0][i] = 'b'+p; board[7][i] = 'w'+p; });
+  for (let i=0;i<8;i++) { board[1][i]='bP'; board[6][i]='wP'; }
+  selected = null; possibleMoves = []; turn = 'w'; gameOver = false;
+  moveHistory = []; capturedWhite = []; capturedBlack = [];
+  lastMove = null; inCheck = false;
+}
+
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  newGame();
+}
+
+function newGame() {
+  initBoard();
+  renderBoard();
+  updateStatus();
+}
+
+// ═══════════════════════════════════════════════
+// MOVE GENERATION
+// ═══════════════════════════════════════════════
+function getColor(piece) { return piece ? piece[0] : null; }
+function getType(piece) { return piece ? piece[1] : null; }
+
+function inBounds(r,c) { return r>=0&&r<8&&c>=0&&c<8; }
+
+function getRawMoves(b, row, col) {
+  const piece = b[row][col];
+  if (!piece) return [];
+  const color = getColor(piece);
+  const type = getType(piece);
+  const moves = [];
+  const opp = color==='w'?'b':'w';
+
+  const add = (r,c) => {
+    if (!inBounds(r,c)) return false;
+    if (getColor(b[r][c]) === color) return false;
+    moves.push([r,c]);
+    return !b[r][c]; // can continue sliding if empty
+  };
+
+  const slide = (dr,dc) => {
+    let r=row+dr, c=col+dc;
+    while(inBounds(r,c)) { if(!add(r,c)) break; r+=dr; c+=dc; }
+  };
+
+  switch(type) {
+    case 'P': {
+      const dir = color==='w'?-1:1;
+      const start = color==='w'?6:1;
+      if (inBounds(row+dir,col) && !b[row+dir][col]) {
+        moves.push([row+dir,col]);
+        if (row===start && !b[row+dir*2][col]) moves.push([row+dir*2,col]);
+      }
+      [-1,1].forEach(dc => {
+        if (inBounds(row+dir,col+dc) && getColor(b[row+dir][col+dc])===opp)
+          moves.push([row+dir,col+dc]);
+      });
+      break;
+    }
+    case 'N':
+      [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]
+        .forEach(([dr,dc]) => add(row+dr,col+dc));
+      break;
+    case 'B': [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>slide(dr,dc)); break;
+    case 'R': [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>slide(dr,dc)); break;
+    case 'Q': [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>slide(dr,dc)); break;
+    case 'K': [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc])=>add(row+dr,col+dc)); break;
+  }
+  return moves;
+}
+
+function findKing(b, color) {
+  for (let r=0;r<8;r++) for(let c=0;c<8;c++)
+    if (b[r][c]===color+'K') return [r,c];
+  return null;
+}
+
+function isInCheck(b, color) {
+  const king = findKing(b, color);
+  if (!king) return false;
+  const opp = color==='w'?'b':'w';
+  for (let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    if (getColor(b[r][c])===opp) {
+      const moves = getRawMoves(b,r,c);
+      if (moves.some(([mr,mc])=>mr===king[0]&&mc===king[1])) return true;
+    }
+  }
+  return false;
+}
+
+function applyMove(b, fromR, fromC, toR, toC) {
+  const nb = b.map(r=>[...r]);
+  nb[toR][toC] = nb[fromR][fromC];
+  nb[fromR][fromC] = null;
+  // Pawn promotion
+  if (getType(nb[toR][toC])==='P') {
+    if (toR===0 && getColor(nb[toR][toC])==='w') nb[toR][toC]='wQ';
+    if (toR===7 && getColor(nb[toR][toC])==='b') nb[toR][toC]='bQ';
+  }
+  return nb;
+}
+
+function getLegalMoves(b, row, col) {
+  const piece = b[row][col];
+  if (!piece) return [];
+  const color = getColor(piece);
+  const raw = getRawMoves(b, row, col);
+  return raw.filter(([r,c]) => {
+    const nb = applyMove(b,row,col,r,c);
+    return !isInCheck(nb, color);
+  });
+}
+
+function getAllLegalMoves(b, color) {
+  const moves = [];
+  for (let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    if (getColor(b[r][c])===color) {
+      const lm = getLegalMoves(b,r,c);
+      lm.forEach(([tr,tc]) => moves.push([r,c,tr,tc]));
+    }
+  }
+  return moves;
+}
+
+// ═══════════════════════════════════════════════
+// AI ENGINE
+// ═══════════════════════════════════════════════
+function evaluateBoard(b) {
+  let score = 0;
+  for (let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    const p = b[r][c];
+    if (!p) continue;
+    const color = getColor(p);
+    const type = getType(p);
+    let val = PIECE_VALUES[type] || 0;
+    // Position bonus
+    const idx = color==='w' ? r*8+c : (7-r)*8+c;
+    if (type==='P') val += PAWN_TABLE[idx]||0;
+    if (type==='N') val += KNIGHT_TABLE[idx]||0;
+    score += color==='w' ? -val : val;
+  }
+  return score;
+}
+
+function minimax(b, depth, alpha, beta, maximizing) {
+  const color = maximizing ? 'b' : 'w';
+  const moves = getAllLegalMoves(b, color);
+
+  if (depth === 0 || moves.length === 0) {
+    if (moves.length === 0) {
+      if (isInCheck(b, color)) return maximizing ? -50000 : 50000;
+      return 0; // stalemate
+    }
+    return evaluateBoard(b);
+  }
+
+  if (maximizing) {
+    let best = -Infinity;
+    for (const [fr,fc,tr,tc] of moves) {
+      const nb = applyMove(b,fr,fc,tr,tc);
+      const val = minimax(nb, depth-1, alpha, beta, false);
+      best = Math.max(best, val);
+      alpha = Math.max(alpha, val);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const [fr,fc,tr,tc] of moves) {
+      const nb = applyMove(b,fr,fc,tr,tc);
+      const val = minimax(nb, depth-1, alpha, beta, true);
+      best = Math.min(best, val);
+      beta = Math.min(beta, val);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function getBestMove(b, color, depth) {
+  const moves = getAllLegalMoves(b, color);
+  if (!moves.length) return null;
+
+  // Easy: pick random from top 5
+  if (difficulty === 1) {
+    const shuffled = moves.sort(() => Math.random()-0.5);
+    return shuffled[0];
+  }
+
+  let best = null;
+  let bestVal = -Infinity;
+  const maximizing = color === 'b';
+
+  for (const [fr,fc,tr,tc] of moves) {
+    const nb = applyMove(b,fr,fc,tr,tc);
+    const val = minimax(nb, depth-1, -Infinity, Infinity, !maximizing) * (maximizing?1:-1);
+    if (val > bestVal) { bestVal = val; best = [fr,fc,tr,tc]; }
+  }
+  return best;
+}
+
+function getDepth() { return [0,1,2,3][difficulty]; }
+
+// ═══════════════════════════════════════════════
+// GAME LOGIC
+// ═══════════════════════════════════════════════
+function handleCellClick(row, col) {
+  if (gameOver || turn !== 'w') return;
+
+  if (selected) {
+    const move = possibleMoves.find(([r,c])=>r===row&&c===col);
+    if (move) {
+      makeMove(selected[0], selected[1], row, col, 'w');
+      selected = null; possibleMoves = [];
+      if (!gameOver) setTimeout(() => aiMove(), difficulty===3?600:300);
+      return;
+    }
+    selected = null; possibleMoves = [];
+  }
+
+  if (getColor(board[row][col]) === 'w') {
+    selected = [row, col];
+    possibleMoves = getLegalMoves(board, row, col);
+  }
+  renderBoard();
+}
+
+function makeMove(fr, fc, tr, tc, color) {
+  const captured = board[tr][tc];
+  moveHistory.push({ board: board.map(r=>[...r]), captured, lastMove });
+  if (captured) {
+    if (color==='w') capturedByWhite.push(captured);
+    else capturedByBlack.push(captured);
+  }
+  board = applyMove(board, fr, fc, tr, tc);
+  lastMove = [fr,fc,tr,tc];
+  turn = color==='w'?'b':'w';
+
+  // Check game state
+  const nextColor = turn;
+  const nextMoves = getAllLegalMoves(board, nextColor);
+  inCheck = isInCheck(board, nextColor);
+
+  if (nextMoves.length === 0) {
+    gameOver = true;
+    if (inCheck) {
+      showResult(color==='w'?'YOU WIN! 🎉':'AI WINS 🤖', color==='w'?'Checkmate! You crushed the AI!':'Checkmate! The AI got you this time.');
+    } else {
+      showResult("STALEMATE 🤝", "No legal moves — it's a draw!");
+    }
+  }
+
+  updateCaptured();
+  renderBoard();
+  updateStatus();
+}
+
+let capturedByWhite = [], capturedByBlack = [];
+
+function aiMove() {
+  if (gameOver) return;
+  document.getElementById('thinkingIndicator').style.display = 'block';
+  setTimeout(() => {
+    const move = getBestMove(board, 'b', getDepth());
+    document.getElementById('thinkingIndicator').style.display = 'none';
+    if (move) {
+      const [fr,fc,tr,tc] = move;
+      makeMove(fr,fc,tr,tc,'b');
+    }
+  }, 50);
+}
+
+function undoMove() {
+  if (moveHistory.length < 2) return; // undo both player and AI move
+  const entries = turn==='w' ? Math.min(2, moveHistory.length) : 1;
+  for (let i=0;i<entries;i++) {
+    const h = moveHistory.pop();
+    board = h.board.map(r=>[...r]);
+    lastMove = h.lastMove;
+  }
+  capturedByWhite = []; capturedByBlack = [];
+  turn = 'w'; gameOver = false; inCheck = false;
+  selected = null; possibleMoves = [];
+  renderBoard(); updateStatus(); updateCaptured();
+}
+
+function hintMove() {
+  if (turn !== 'w' || gameOver) return;
+  const move = getBestMove(board, 'w', 2);
+  if (move) {
+    selected = [move[0],move[1]];
+    possibleMoves = getLegalMoves(board, move[0], move[1]);
+    renderBoard();
+  }
+}
+
+function showResult(title, msg) {
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = `
+    <div style="font-size:60px">♟️</div>
+    <h1 style="font-size:clamp(22px,6vw,36px)">${title}</h1>
+    <p>${msg}</p>
+    <div style="display:flex;gap:10px;margin:4px 0">
+      <button class="diff-btn ${difficulty===1?'active':''}" onclick="setDiff(1,this)">🟢 Easy</button>
+      <button class="diff-btn ${difficulty===2?'active':''}" onclick="setDiff(2,this)">🟡 Medium</button>
+      <button class="diff-btn ${difficulty===3?'active':''}" onclick="setDiff(3,this)">🔴 Hard</button>
+    </div>
+    <button class="start-btn" onclick="startGame()">PLAY AGAIN</button>
+  `;
+  ov.style.display = 'flex';
+}
+
+function updateStatus() {
+  const el = document.getElementById('status');
+  if (gameOver) { el.textContent = 'Game Over'; return; }
+  if (turn==='w') {
+    el.textContent = inCheck ? '⚠️ Check!' : 'Your turn';
+    el.style.color = inCheck ? '#ef4444' : '#a78bfa';
+  } else {
+    el.textContent = '🤖 Thinking';
+    el.style.color = '#f59e0b';
+  }
+}
+
+function updateCaptured() {
+  const pieceEmoji = p => PIECES[p] || '';
+  document.getElementById('capturedByWhite').textContent = capturedByWhite.map(pieceEmoji).join('');
+  document.getElementById('capturedByBlack').textContent = capturedByBlack.map(pieceEmoji).join('');
+}
+
+// ═══════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════
+function renderBoard() {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+
+  // Find king in check
+  let checkKingPos = null;
+  if (inCheck) checkKingPos = findKing(board, turn);
+
+  for (let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    const cell = document.createElement('div');
+    const isLight = (r+c)%2===0;
+    cell.className = 'cell ' + (isLight?'light':'dark');
+
+    // Highlights
+    if (selected && selected[0]===r && selected[1]===c) cell.classList.add('selected');
+    if (lastMove && lastMove.some((_,i)=>i%2===0&&lastMove[i]===r&&lastMove[i+1]===c)) cell.classList.add('last-move');
+    if (checkKingPos && checkKingPos[0]===r && checkKingPos[1]===c) cell.classList.add('check');
+
+    const isPossible = possibleMoves.some(([pr,pc])=>pr===r&&pc===c);
+    if (isPossible) {
+      cell.classList.add('possible');
+      if (board[r][c]) cell.classList.add('capture');
+    }
+
+    if (board[r][c]) {
+      cell.textContent = PIECES[board[r][c]] || '';
+    }
+
+    cell.addEventListener('click', () => handleCellClick(r,c));
+    boardEl.appendChild(cell);
+  }
+}
+
+// Init
+initBoard();
+renderBoard();
+updateStatus();
+</script>
+</body>
+</html>
